@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from fintrace.calendar.cninfo import query_annual_reports
 from fintrace.calendar.models import CalendarEvent
 from fintrace.calendar.normalization import CalendarNormalizationError, normalize_event
 from fintrace.shared.company_resolver import normalize_company_code, resolve_company
@@ -44,20 +45,47 @@ def _write_csv(path: Path, events: list[CalendarEvent]) -> None:
             writer.writerow(event.model_dump(mode="json"))
 
 
-def _query_instruction(company_code: str, company_name: str) -> dict[str, Any]:
+def _cninfo_home_url() -> str:
     address = require_file("cninfo_address_file").read_text(encoding="utf-8").strip()
-    url = address[address.find("http") :] if "http" in address else address
+    return address[address.find("http") :] if "http" in address else address
+
+
+def _query_instruction(company_code: str, company_name: str) -> dict[str, Any]:
     return {
         "company_code": company_code,
         "source_site": "巨潮资讯网",
-        "source_url": url,
+        "source_url": _cninfo_home_url(),
         "query_keyword_template": f"{company_code} {company_name} <年份> <报告类型>",
         "instructions": [
-            "在巨潮资讯网按股票代码搜索定期报告和预约披露记录。",
-            "将结果按项目 CSV 模板填写后重新运行本命令。",
-            "不要根据常识补填缺失的公告日期或时间。",
+            "在巨潮资讯网按股票代码搜索年度报告。",
+            "排除年度报告摘要、半年度报告和英文版，只记录正式年度报告发布时间。",
+            "网络查询失败后可按项目 CSV 模板填写，并使用 --manual-file 重新运行。",
         ],
     }
+
+
+def _events_from_cninfo(
+    announcements: list[dict[str, Any]], company_code: str, company_name: str, queried_at: datetime
+) -> list[CalendarEvent]:
+    return [
+        normalize_event(
+            {
+                "report_period": item["report_period"],
+                "report_type": "annual",
+                "event_type": "actual",
+                "event_date": item["event_date"],
+                "announcement_title": item["announcement_title"],
+                "source_site": "巨潮资讯网",
+                "source_url": item["source_url"],
+                "query_keyword": company_code,
+                "queried_at": queried_at.isoformat(),
+                "manual_review_required": False,
+            },
+            company_code,
+            company_name,
+        )
+        for item in announcements
+    ]
 
 
 def run_calendar(
@@ -69,6 +97,7 @@ def run_calendar(
     try:
         company = resolve_company(company_input, target_year)
         events: list[CalendarEvent] = []
+        source_preserved = False
         if manual_file:
             step = "import_manual_calendar"
             context.start_step(step, {"manual_file": project_relative(manual_file)})
@@ -91,6 +120,34 @@ def run_calendar(
                     "event_count": len(events),
                 },
             )
+            source_preserved = True
+        else:
+            step = "query_cninfo_annual_reports"
+            context.start_step(
+                step, {"company_code": company_code, "publication_year": target_year}
+            )
+            queried_at = datetime.now(UTC)
+            announcements, audit = query_annual_reports(
+                company_code, target_year, source_url=_cninfo_home_url()
+            )
+            raw_dir = configured_path("raw_calendar_dir") / company_code / context.run_id
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            raw_response = raw_dir / "cninfo_annual_reports.json"
+            write_json(raw_response, audit)
+            events = _events_from_cninfo(
+                announcements, company_code, company.company_name, queried_at
+            )
+            context.finish_step(
+                step,
+                {
+                    "source_file": project_relative(raw_response),
+                    "candidate_count": audit["candidate_count"],
+                    "event_count": len(events),
+                },
+            )
+            source_preserved = True
+
+        events.sort(key=lambda event: (event.event_date, event.event_time or datetime.min.time()))
 
         output_dir = context.output_dir
         _write_csv(output_dir / "calendar_events.csv", events)
@@ -105,7 +162,7 @@ def run_calendar(
         }
         write_json(output_dir / "calendar_timeline.json", timeline)
         instruction = _query_instruction(company_code, company.company_name)
-        manual_review = manual_file is None
+        manual_review = not events
         if manual_review:
             write_json(output_dir / "manual_query_instruction.json", instruction)
         quality = {
@@ -114,8 +171,12 @@ def run_calendar(
             "manual_review_required": manual_review,
             "checks": {
                 "company_resolved": True,
-                "source_preserved": manual_file is not None,
+                "source_preserved": source_preserved,
                 "event_types_valid": True,
+                "annual_reports_only": manual_file is not None or all(
+                    event.report_type == "annual" and event.event_type == "actual"
+                    for event in events
+                ),
             },
         }
         write_json(output_dir / "quality_report.json", quality)

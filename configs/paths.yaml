@@ -12,5 +12,4 @@ logs_dir: "data/logs"
 
 company_master_file: "lookupfiles/STK_LISTEDCOINFOANL_20200101_20251231.xlsx"
 company_master_desc_file: "lookupfiles/STK_LISTEDCOINFOANL[DES][xlsx].txt"
-cninfo_address_file: "lookupfiles/web_address.txt"
-
+cninfo_address_file: "FRA附件20260717/lookupfiles/web_address.txt"

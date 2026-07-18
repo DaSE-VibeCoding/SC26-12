@@ -23,16 +23,17 @@ python -m pytest
 python scripts/resolve_company.py --company 600519 --target-year 2026
 ```
 
-导入人工复核后的披露日历：
+从 `lookupfiles/web_address.txt` 指定的巨潮资讯网查询目标年份发布的正式中文年度报告，
+排除摘要、半年度报告和英文版，并记录发布时间：
 
 ```bash
 python scripts/run_calendar.py \
   --company 600519 \
-  --target-year 2026 \
-  --manual-file tests/fixtures/calendar/600519_events.csv
+  --target-year 2026
 ```
 
-未提供 `--manual-file` 时，系统不会猜测日期，而是在输出目录生成巨潮资讯网人工检索指引。
+网络查询无结果时，系统不会猜测日期，而是在输出目录生成巨潮资讯网人工检索指引。
+也可以使用 `--manual-file` 导入人工复核后的 CSV 或 JSON。
 
 分析样例财报：
 
