@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="同时分析上市公司披露时间与关键财务指标，并提供PDF原文证据。">
+  <title>Financial Report Assistant</title>
+  <link rel="stylesheet" href="/static/styles.css?v=4.0">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-block">
+      <span class="brand-mark" aria-hidden="true">FR</span>
+      <div>
+        <h1>Financial Report Assistant</h1>
+        <p>披露时间与关键财务指标双路径并行分析</p>
+      </div>
+    </div>
+    <div class="header-status" id="headerStatus">等待输入股票代码</div>
+  </header>
+
+  <main>
+    <section class="upload-panel" aria-labelledby="uploadTitle">
+      <div>
+        <p class="eyebrow">一次输入 · 两路并行</p>
+        <h2 id="uploadTitle">输入股票代码，同时生成两类分析结果</h2>
+        <p class="helper">披露时间路径核对预约与实际披露日期；财务指标路径下载并解析 2021—2025 年年度报告。</p>
+      </div>
+      <form class="stock-query-actions" id="stockForm">
+        <label class="stock-code-field" for="stockCode">
+          <span>股票代码</span>
+          <input id="stockCode" name="stock_code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="例如：600519" autocomplete="off" required>
+          <small>唯一必填项 · 6 位数字代码</small>
+        </label>
+        <label class="compact-select" for="reportYear">
+          <span>披露年度</span>
+          <select id="reportYear" aria-label="披露报告年度">
+            <option value="2026" selected>2026</option>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+            <option value="2023">2023</option>
+            <option value="2022">2022</option>
+          </select>
+        </label>
+        <label class="compact-select" for="reportType">
+          <span>披露类型</span>
+          <select id="reportType" aria-label="披露报告类型">
+            <option value="Q1" selected>一季报</option>
+            <option value="H1">半年报</option>
+            <option value="Q3">三季报</option>
+            <option value="FY">年报</option>
+          </select>
+        </label>
+        <button class="button button-primary" id="analyzeStockButton" type="submit" disabled>并行分析</button>
+      </form>
+
+      <div class="task-grid" aria-live="polite">
+        <div class="task-status" id="disclosureTask" data-state="idle">
+          <span class="task-dot" aria-hidden="true"></span>
+          <div><strong>DisclosureTimeAssistant</strong><small id="disclosureTaskText">等待开始</small></div>
+        </div>
+        <div class="task-status" id="financialTask" data-state="idle">
+          <span class="task-dot" aria-hidden="true"></span>
+          <div><strong>FinancialIndicatorsAssistant</strong><small id="financialTaskText">等待开始</small></div>
+        </div>
+      </div>
+      <div class="progress-line" id="progressLine" role="status" aria-live="polite"></div>
+    </section>
+
+    <nav class="assistant-tabs" role="tablist" aria-label="分析结果切换">
+      <button class="assistant-tab is-active" id="disclosureTab" type="button" role="tab" aria-selected="true" aria-controls="disclosurePanel" data-tab="disclosure">
+        DisclosureTimeAssistant
+        <span class="tab-state" id="disclosureTabState">等待</span>
+      </button>
+      <button class="assistant-tab" id="financialTab" type="button" role="tab" aria-selected="false" aria-controls="financialPanel" data-tab="financial">
+        FinancialIndicatorsAssistant
+        <span class="tab-state" id="financialTabState">等待</span>
+      </button>
+    </nav>
+
+    <section class="assistant-panel is-active" id="disclosurePanel" role="tabpanel" aria-labelledby="disclosureTab">
+      <section class="empty-state" id="disclosureEmptyState">
+        <div class="empty-visual disclosure-visual" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        <h2>披露时点与同行对比</h2>
+        <p>查询后展示目标公司采用日期、同行排序、五年披露记录及可回查的数据来源。</p>
+      </section>
+      <div class="panel-error" id="disclosureError" hidden></div>
+      <section class="disclosure-dashboard" id="disclosureDashboard" hidden>
+        <div class="dashboard-heading">
+          <div>
+            <p class="eyebrow">披露时间结果</p>
+            <h2><span id="disclosureCompany">—</span><span class="year-range" id="disclosurePeriod"></span></h2>
+            <p class="helper" id="disclosurePeerNote">按行业与总资产自动选择同行</p>
+          </div>
+        </div>
+        <div class="disclosure-card-grid" id="disclosureCards"></div>
+
+        <section class="result-panel">
+          <div class="result-panel-heading"><h3>同行披露对比</h3><span id="comparisonNote"></span></div>
+          <div class="table-wrap disclosure-table-wrap" id="disclosureComparison"></div>
+        </section>
+
+        <section class="result-panel">
+          <div class="result-panel-heading"><h3>目标公司五年披露记录</h3><span>蓝色为实际披露 · 黄色为预约披露</span></div>
+          <div class="table-wrap disclosure-table-wrap" id="disclosureHistory"></div>
+        </section>
+
+        <section class="result-panel source-panel">
+          <div class="result-panel-heading"><h3>数据真实性与来源</h3><span>支持逐条回查</span></div>
+          <div id="disclosureSourceSummary"></div>
+          <details><summary>查看导入审计与原始缓存位置</summary><pre id="disclosureAudit"></pre></details>
+        </section>
+      </section>
+    </section>
+
+    <section class="assistant-panel" id="financialPanel" role="tabpanel" aria-labelledby="financialTab" hidden>
+      <section class="empty-state" id="emptyState">
+        <div class="empty-visual" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        <h2>数据与原文并排核验</h2>
+        <p>分析完成后展示 13 项关键指标；点击“查看证据”，右侧 PDF 阅读器会跳页并高亮原文。</p>
+      </section>
+      <div class="panel-error" id="financialError" hidden></div>
+
+      <section class="dashboard" id="dashboard" hidden>
+        <div class="dashboard-heading">
+          <div>
+            <p class="eyebrow">财务指标结果</p>
+            <h2><span id="companyName">—</span><span class="year-range" id="yearRange"></span></h2>
+            <p class="helper" id="scopeText">合并口径 · 各年原报告优先</p>
+          </div>
+          <div class="result-actions">
+            <a class="button button-quiet" href="/api/artifacts/normalized_financials.json" download>下载标准化数据</a>
+            <button class="button button-quiet" id="qualityButton" type="button">查看质量说明</button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" id="kpiGrid" aria-label="最新年度关键指标"></div>
+
+        <div class="workspace-grid">
+          <section class="analysis-column" aria-labelledby="trendTitle">
+            <div class="section-toolbar">
+              <div><p class="eyebrow">趋势与明细</p><h3 id="trendTitle">营业收入</h3></div>
+              <label class="select-field" for="metricSelect"><span>指标</span><select id="metricSelect"></select></label>
+            </div>
+            <div class="chart-panel"><div class="chart-legend" id="chartLegend"></div><canvas id="trendChart" aria-label="所选财务指标年度趋势图"></canvas></div>
+            <div class="table-wrap">
+              <table class="data-table"><thead><tr><th>年度</th><th class="numeric">绝对值</th><th class="numeric">同比 / 变化</th><th>口径</th><th><span class="sr-only">证据操作</span></th></tr></thead><tbody id="metricTableBody"></tbody></table>
+            </div>
+            <div class="metric-note" id="metricNote"></div>
+          </section>
+
+          <aside class="evidence-column" aria-labelledby="evidenceTitle">
+            <div class="evidence-header"><div><p class="eyebrow">PDF 原文证据</p><h3 id="evidenceTitle">请选择有数据的年度</h3></div><span class="evidence-badge" id="evidenceBadge">等待定位</span></div>
+            <div class="evidence-meta"><strong id="evidenceFile">—</strong><span id="evidenceSection">—</span></div>
+            <div class="pdf-toolbar" aria-label="PDF阅读器工具栏">
+              <button type="button" id="prevPage" aria-label="上一页">上一页</button>
+              <span class="page-indicator"><input id="pageInput" type="number" min="1" value="1" aria-label="页码"> / <span id="pageCount">—</span></span>
+              <button type="button" id="nextPage" aria-label="下一页">下一页</button><span class="toolbar-spacer"></span>
+              <button type="button" id="zoomOut" aria-label="缩小">−</button><span id="zoomValue">100%</span><button type="button" id="zoomIn" aria-label="放大">＋</button>
+            </div>
+            <div class="pdf-stage" id="pdfStage">
+              <div class="pdf-placeholder" id="pdfPlaceholder"><strong>PDF 阅读器</strong><span>点击左侧“查看证据”后加载原始年报</span></div>
+              <div class="pdf-canvas-wrap" id="pdfCanvasWrap" hidden><canvas id="pdfCanvas"></canvas><div class="pdf-highlight" id="pdfHighlight" aria-label="证据高亮区域"></div></div>
+            </div>
+            <div class="evidence-caption" id="evidenceCaption">系统将显示来源文件、页码、表格行名和提取口径。</div>
+          </aside>
+        </div>
+      </section>
+    </section>
+
+    <dialog id="qualityDialog">
+      <form method="dialog" class="dialog-card">
+        <div class="dialog-heading"><div><p class="eyebrow">数据质量</p><h2>提取与校验说明</h2></div><button class="dialog-close" value="cancel" aria-label="关闭">×</button></div>
+        <div class="quality-summary" id="qualitySummary"></div><ul class="warning-list" id="warningList"></ul>
+      </form>
+    </dialog>
+  </main>
+
+  <script type="module" src="/static/app.js?v=4.0"></script>
+</body>
+</html>
