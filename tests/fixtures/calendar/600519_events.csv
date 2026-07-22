@@ -1,5 +1,0 @@
-report_period,report_type,event_type,event_date,event_time,previous_date,announcement_title,source_site,source_url,manual_review_required
-2025-12-31,年报,scheduled,2026-03-31,,,2025年年度报告预约披露,巨潮资讯网,https://example.invalid/schedule,false
-2025-12-31,annual,schedule_change,2026-04-02,,2026-03-31,2025年年度报告预约披露日期变更,巨潮资讯网,https://example.invalid/change,false
-2025-12-31,annual,actual,2026-04-02,18:30:00,,2025年年度报告,巨潮资讯网,https://example.invalid/report,false
-
